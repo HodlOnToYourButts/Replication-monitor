@@ -52,18 +52,24 @@ app.get('/replication/status/:database', async (req, res) => {
     
     let dbReplications = replicationDocs.rows
       .map(row => row.doc)
-      .filter(doc => doc && (
-        doc.source === database || 
-        doc.target === database ||
-        (typeof doc.source === 'string' && doc.source.includes(`/${database}`)) ||
-        (typeof doc.target === 'string' && doc.target.includes(`/${database}`))
-      ));
+      .filter(doc => {
+        if (!doc) return false;
+        
+        const sourceUrl = typeof doc.source === 'object' ? doc.source.url : doc.source;
+        const targetUrl = typeof doc.target === 'object' ? doc.target.url : doc.target;
+        
+        return sourceUrl === database || 
+               targetUrl === database ||
+               (typeof sourceUrl === 'string' && sourceUrl.includes(`/${database}`)) ||
+               (typeof targetUrl === 'string' && targetUrl.includes(`/${database}`));
+      });
     
     if (target === 'true') {
-      dbReplications = dbReplications.filter(doc => 
-        doc.target === database || 
-        (typeof doc.target === 'string' && doc.target.includes(`/${database}`))
-      );
+      dbReplications = dbReplications.filter(doc => {
+        const targetUrl = typeof doc.target === 'object' ? doc.target.url : doc.target;
+        return targetUrl === database || 
+               (typeof targetUrl === 'string' && targetUrl.includes(`/${database}`));
+      });
     }
     
     const replications = dbReplications.map(doc => {
@@ -76,10 +82,13 @@ app.get('/replication/status/:database', async (req, res) => {
         timeSinceLastSuccess = Math.floor((now - lastSuccessTime) / 1000);
       }
       
+      const sourceUrl = typeof doc.source === 'object' ? doc.source.url : doc.source;
+      const targetUrl = typeof doc.target === 'object' ? doc.target.url : doc.target;
+      
       return {
         id: doc._id,
-        source: doc.source,
-        target: doc.target,
+        source: sourceUrl,
+        target: targetUrl,
         state: doc._replication_state,
         last_state_change: doc._replication_state_time,
         time_since_last_update_seconds: timeSinceLastSuccess,
