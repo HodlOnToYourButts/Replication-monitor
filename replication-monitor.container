@@ -4,7 +4,7 @@ After=network-online.target
 Wants=network-online.target
 
 [Container]
-Image=ghcr.io/hodlontoyourbutts/replication-monitor:master
+Image=ghcr.io/hodlontoyourbutts/replication-monitor:latest
 PublishPort=8080:8080
 EnvironmentFile=%h/.config/replication-monitor/replication-monitor.env
 AutoUpdate=registry
