@@ -18,25 +18,18 @@ app.get('/health', (req, res) => {
 });
 
 app.get('/debug/replications', async (req, res) => {
+  res.json({ message: 'Debug endpoint working' });
+});
+
+app.get('/debug/replications/full', async (req, res) => {
   try {
     const replicationDocs = await couchdb.db.use('_replicator').list({
       include_docs: true
     });
     
-    const allReplications = replicationDocs.rows
-      .filter(row => row.doc && !row.doc._id.startsWith('_design/'))
-      .map(row => ({
-        id: row.doc._id,
-        source: row.doc.source,
-        target: row.doc.target,
-        state: row.doc._replication_state,
-        last_updated: row.doc._replication_state_time,
-        full_doc: row.doc
-      }));
-    
     res.json({
-      total_replications: allReplications.length,
-      replications: allReplications
+      total_rows: replicationDocs.rows.length,
+      rows: replicationDocs.rows
     });
     
   } catch (error) {
@@ -59,10 +52,18 @@ app.get('/replication/status/:database', async (req, res) => {
     
     let dbReplications = replicationDocs.rows
       .map(row => row.doc)
-      .filter(doc => doc && (doc.source === database || doc.target === database));
+      .filter(doc => doc && (
+        doc.source === database || 
+        doc.target === database ||
+        (typeof doc.source === 'string' && doc.source.includes(`/${database}`)) ||
+        (typeof doc.target === 'string' && doc.target.includes(`/${database}`))
+      ));
     
     if (target === 'true') {
-      dbReplications = dbReplications.filter(doc => doc.target === database);
+      dbReplications = dbReplications.filter(doc => 
+        doc.target === database || 
+        (typeof doc.target === 'string' && doc.target.includes(`/${database}`))
+      );
     }
     
     const replications = dbReplications.map(doc => {
