@@ -17,6 +17,36 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', service: 'replication-monitor' });
 });
 
+app.get('/debug/replications', async (req, res) => {
+  try {
+    const replicationDocs = await couchdb.db.use('_replicator').list({
+      include_docs: true
+    });
+    
+    const allReplications = replicationDocs.rows
+      .map(row => ({
+        id: row.doc._id,
+        source: row.doc.source,
+        target: row.doc.target,
+        state: row.doc._replication_state,
+        last_updated: row.doc._replication_state_time,
+        full_doc: row.doc
+      }));
+    
+    res.json({
+      total_replications: allReplications.length,
+      replications: allReplications
+    });
+    
+  } catch (error) {
+    console.error('Error fetching all replications:', error);
+    res.status(500).json({
+      error: 'Failed to fetch replications',
+      message: error.message
+    });
+  }
+});
+
 app.get('/replication/status/:database', async (req, res) => {
   try {
     const { database } = req.params;
