@@ -24,6 +24,7 @@ app.get('/debug/replications', async (req, res) => {
     });
     
     const allReplications = replicationDocs.rows
+      .filter(row => row.doc && !row.doc._id.startsWith('_design/'))
       .map(row => ({
         id: row.doc._id,
         source: row.doc.source,
