@@ -128,19 +128,24 @@ app.get('/replication/status/:database', async (req, res) => {
       let lastActivity = null;
       let timeSinceLastActivity = null;
       
-      if (activeTask) {
-        status = activeTask.process_status === 'waiting' ? 'running' : activeTask.process_status;
+      if (activeTask && activeTask.process_status === 'waiting') {
+        // Present in active tasks and waiting = running successfully
+        status = 'running';
         lastActivity = new Date(activeTask.updated_on * 1000);
         timeSinceLastActivity = Math.floor((Date.now() - lastActivity.getTime()) / 1000);
-      }
-      
-      // Check for recent crashes in scheduler history
-      if (schedulerJob && schedulerJob.history && schedulerJob.history.length > 0) {
-        const recentHistory = schedulerJob.history.slice(0, 2);
-        const hasCrashed = recentHistory.some(event => event.type === 'crashed');
-        if (hasCrashed && status === 'running') {
-          status = 'retrying';
+      } else if (schedulerJob && !schedulerJob.pid) {
+        // Has scheduler job but no active PID = retrying/failed
+        status = 'retrying';
+        // Use most recent history timestamp for last activity
+        if (schedulerJob.history && schedulerJob.history.length > 0) {
+          lastActivity = new Date(schedulerJob.history[0].timestamp);
+          timeSinceLastActivity = Math.floor((Date.now() - lastActivity.getTime()) / 1000);
         }
+      } else if (activeTask) {
+        // Has active task but different process_status
+        status = activeTask.process_status;
+        lastActivity = new Date(activeTask.updated_on * 1000);
+        timeSinceLastActivity = Math.floor((Date.now() - lastActivity.getTime()) / 1000);
       }
       
       return {
