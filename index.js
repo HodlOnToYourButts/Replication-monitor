@@ -80,9 +80,16 @@ app.get('/replication/status/:database', async (req, res) => {
     const { database } = req.params;
     const { target } = req.query;
     
+    // Get replication configurations
     const replicationDocs = await couchdb.db.use('_replicator').list({
       include_docs: true
     });
+    
+    // Get live replication status
+    const [activeTasks, schedulerJobs] = await Promise.all([
+      couchdb.request({ path: '_active_tasks' }),
+      couchdb.request({ path: '_scheduler/jobs' })
+    ]);
     
     let dbReplications = replicationDocs.rows
       .map(row => row.doc)
@@ -107,26 +114,58 @@ app.get('/replication/status/:database', async (req, res) => {
     }
     
     const replications = dbReplications.map(doc => {
-      const now = new Date();
-      let lastSuccessTime = null;
-      let timeSinceLastSuccess = null;
-      
-      if (doc._replication_state_time) {
-        lastSuccessTime = new Date(doc._replication_state_time);
-        timeSinceLastSuccess = Math.floor((now - lastSuccessTime) / 1000);
-      }
-      
       const sourceUrl = typeof doc.source === 'object' ? doc.source.url : doc.source;
       const targetUrl = typeof doc.target === 'object' ? doc.target.url : doc.target;
+      
+      // Find matching active task
+      const activeTask = activeTasks.find(task => task.doc_id === doc._id);
+      
+      // Find matching scheduler job
+      const schedulerJob = schedulerJobs.jobs.find(job => job.doc_id === doc._id);
+      
+      // Determine status
+      let status = 'unknown';
+      let lastActivity = null;
+      let timeSinceLastActivity = null;
+      
+      if (activeTask) {
+        status = activeTask.process_status === 'waiting' ? 'running' : activeTask.process_status;
+        lastActivity = new Date(activeTask.updated_on * 1000);
+        timeSinceLastActivity = Math.floor((Date.now() - lastActivity.getTime()) / 1000);
+      }
+      
+      // Check for recent crashes in scheduler history
+      if (schedulerJob && schedulerJob.history && schedulerJob.history.length > 0) {
+        const recentHistory = schedulerJob.history.slice(0, 2);
+        const hasCrashed = recentHistory.some(event => event.type === 'crashed');
+        if (hasCrashed && status === 'running') {
+          status = 'retrying';
+        }
+      }
       
       return {
         id: doc._id,
         source: sourceUrl,
         target: targetUrl,
-        state: doc._replication_state,
-        last_state_change: doc._replication_state_time,
-        time_since_last_update_seconds: timeSinceLastSuccess,
-        stats: doc._replication_stats || null
+        status: status,
+        continuous: doc.continuous || false,
+        last_activity: lastActivity,
+        time_since_last_activity_seconds: timeSinceLastActivity,
+        stats: activeTask ? {
+          docs_read: activeTask.docs_read || 0,
+          docs_written: activeTask.docs_written || 0,
+          doc_write_failures: activeTask.doc_write_failures || 0,
+          revisions_checked: activeTask.revisions_checked || 0,
+          changes_pending: activeTask.changes_pending
+        } : null,
+        recent_errors: schedulerJob && schedulerJob.history ? 
+          schedulerJob.history
+            .filter(event => event.type === 'crashed')
+            .slice(0, 3)
+            .map(event => ({
+              timestamp: event.timestamp,
+              reason: event.reason
+            })) : []
       };
     });
     
