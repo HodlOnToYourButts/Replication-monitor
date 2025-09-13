@@ -20,33 +20,45 @@ app.get('/health', (req, res) => {
 app.get('/replication/status/:database', async (req, res) => {
   try {
     const { database } = req.params;
-    
-    const db = couchdb.db.use(database);
-    const info = await db.info();
+    const { target } = req.query;
     
     const replicationDocs = await couchdb.db.use('_replicator').list({
       include_docs: true
     });
     
-    const dbReplications = replicationDocs.rows
+    let dbReplications = replicationDocs.rows
       .map(row => row.doc)
-      .filter(doc => doc && (doc.source === database || doc.target === database))
-      .map(doc => ({
+      .filter(doc => doc && (doc.source === database || doc.target === database));
+    
+    if (target === 'true') {
+      dbReplications = dbReplications.filter(doc => doc.target === database);
+    }
+    
+    const replications = dbReplications.map(doc => {
+      const now = new Date();
+      let lastSuccessTime = null;
+      let timeSinceLastSuccess = null;
+      
+      if (doc._replication_state_time) {
+        lastSuccessTime = new Date(doc._replication_state_time);
+        timeSinceLastSuccess = Math.floor((now - lastSuccessTime) / 1000);
+      }
+      
+      return {
         id: doc._id,
         source: doc.source,
         target: doc.target,
         state: doc._replication_state,
-        last_updated: doc._replication_state_time
-      }));
+        last_state_change: doc._replication_state_time,
+        time_since_last_update_seconds: timeSinceLastSuccess,
+        stats: doc._replication_stats || null
+      };
+    });
     
     res.json({
       database,
-      info: {
-        doc_count: info.doc_count,
-        update_seq: info.update_seq,
-        purge_seq: info.purge_seq
-      },
-      replications: dbReplications
+      target_filter: target === 'true',
+      replications
     });
     
   } catch (error) {
