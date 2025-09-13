@@ -41,6 +41,40 @@ app.get('/debug/replications/full', async (req, res) => {
   }
 });
 
+app.get('/debug/active-tasks', async (req, res) => {
+  try {
+    const activeTasks = await couchdb.request({
+      path: '_active_tasks'
+    });
+    
+    res.json(activeTasks);
+    
+  } catch (error) {
+    console.error('Error fetching active tasks:', error);
+    res.status(500).json({
+      error: 'Failed to fetch active tasks',
+      message: error.message
+    });
+  }
+});
+
+app.get('/debug/scheduler-jobs', async (req, res) => {
+  try {
+    const schedulerJobs = await couchdb.request({
+      path: '_scheduler/jobs'
+    });
+    
+    res.json(schedulerJobs);
+    
+  } catch (error) {
+    console.error('Error fetching scheduler jobs:', error);
+    res.status(500).json({
+      error: 'Failed to fetch scheduler jobs',
+      message: error.message
+    });
+  }
+});
+
 app.get('/replication/status/:database', async (req, res) => {
   try {
     const { database } = req.params;
