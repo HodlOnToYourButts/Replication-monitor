@@ -13,7 +13,7 @@ const couchdb = nano(`${couchdbUrl.replace('://', `://${adminUser}:${adminPasswo
 
 app.use(express.json());
 
-app.get('/health', (req, res) => {
+app.get('/', (req, res) => {
   res.json({ status: 'ok', service: 'replication-monitor' });
 });
 
